@@ -1,0 +1,210 @@
+{
+    "name": "DATABRICK_PIPELINE",
+    "properties": {
+        "activities": [
+            {
+                "name": "TABLENAME LOOKUP",
+                "description": "QUERYING THE DB TO RETRIEVE THE TABLE NAME\n",
+                "type": "Lookup",
+                "dependsOn": [],
+                "policy": {
+                    "timeout": "0.12:00:00",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "source": {
+                        "type": "AzureSqlSource",
+                        "sqlReaderQuery": "select s.name as SchemaName, t.name as TableName from sys.tables t inner join sys.schemas s\non t.schema_id = s.schema_id\nwhere s.name = 'SalesLT'",
+                        "queryTimeout": "02:00:00",
+                        "partitionOption": "None"
+                    },
+                    "dataset": {
+                        "referenceName": "ADW_NO_PARAMETER",
+                        "type": "DatasetReference"
+                    },
+                    "firstRowOnly": false
+                }
+            },
+            {
+                "name": "ForEach1",
+                "type": "ForEach",
+                "dependsOn": [
+                    {
+                        "activity": "TABLENAME LOOKUP",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "userProperties": [],
+                "typeProperties": {
+                    "items": {
+                        "value": "@activity('TABLENAME LOOKUP').output.value",
+                        "type": "Expression"
+                    },
+                    "isSequential": false,
+                    "activities": [
+                        {
+                            "name": "Copy data1",
+                            "type": "Copy",
+                            "dependsOn": [],
+                            "policy": {
+                                "timeout": "0.12:00:00",
+                                "retry": 0,
+                                "retryIntervalInSeconds": 30,
+                                "secureOutput": false,
+                                "secureInput": false
+                            },
+                            "userProperties": [],
+                            "typeProperties": {
+                                "source": {
+                                    "type": "AzureSqlSource",
+                                    "queryTimeout": "02:00:00",
+                                    "partitionOption": "None"
+                                },
+                                "sink": {
+                                    "type": "ParquetSink",
+                                    "storeSettings": {
+                                        "type": "AzureBlobFSWriteSettings"
+                                    },
+                                    "formatSettings": {
+                                        "type": "ParquetWriteSettings"
+                                    }
+                                },
+                                "enableStaging": false,
+                                "translator": {
+                                    "type": "TabularTranslator",
+                                    "typeConversion": true,
+                                    "typeConversionSettings": {
+                                        "allowDataTruncation": true,
+                                        "treatBooleanAsNumber": false
+                                    }
+                                }
+                            },
+                            "inputs": [
+                                {
+                                    "referenceName": "ADW",
+                                    "type": "DatasetReference",
+                                    "parameters": {
+                                        "SchemaName": {
+                                            "value": "@item().SchemaName",
+                                            "type": "Expression"
+                                        },
+                                        "TableName": {
+                                            "value": "@item().TableName",
+                                            "type": "Expression"
+                                        }
+                                    }
+                                }
+                            ],
+                            "outputs": [
+                                {
+                                    "referenceName": "ADW_PARQUET",
+                                    "type": "DatasetReference",
+                                    "parameters": {
+                                        "SchemaName": {
+                                            "value": "@item().SchemaName",
+                                            "type": "Expression"
+                                        },
+                                        "TableName": {
+                                            "value": "@item().TableName",
+                                            "type": "Expression"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    ]
+                }
+            },
+            {
+                "name": "MOUNT POINT SETUP",
+                "type": "DatabricksNotebook",
+                "dependsOn": [
+                    {
+                        "activity": "ForEach1",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.12:00:00",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "notebookPath": "/ISAAC/Set_Mount_Points"
+                },
+                "linkedServiceName": {
+                    "referenceName": "ISAAC_BRICKS",
+                    "type": "LinkedServiceReference"
+                }
+            },
+            {
+                "name": "BRONZE TO SILVER",
+                "type": "DatabricksNotebook",
+                "dependsOn": [
+                    {
+                        "activity": "MOUNT POINT SETUP",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.12:00:00",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "notebookPath": "/ISAAC/BRONZE TO SILVER"
+                },
+                "linkedServiceName": {
+                    "referenceName": "ISAAC_BRICKS",
+                    "type": "LinkedServiceReference"
+                }
+            },
+            {
+                "name": "SILVER TO GOLD",
+                "type": "DatabricksNotebook",
+                "dependsOn": [
+                    {
+                        "activity": "BRONZE TO SILVER",
+                        "dependencyConditions": [
+                            "Succeeded"
+                        ]
+                    }
+                ],
+                "policy": {
+                    "timeout": "0.12:00:00",
+                    "retry": 0,
+                    "retryIntervalInSeconds": 30,
+                    "secureOutput": false,
+                    "secureInput": false
+                },
+                "userProperties": [],
+                "typeProperties": {
+                    "notebookPath": "/ISAAC/SILVER TO GOLD"
+                },
+                "linkedServiceName": {
+                    "referenceName": "ISAAC_BRICKS",
+                    "type": "LinkedServiceReference"
+                }
+            }
+        ],
+        "annotations": [],
+        "lastPublishTime": "2025-10-23T15:14:57Z"
+    },
+    "type": "Microsoft.DataFactory/factories/pipelines"
+}
